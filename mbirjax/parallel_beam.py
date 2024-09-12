@@ -3,6 +3,21 @@ import jax.numpy as jnp
 from functools import partial
 from collections import namedtuple
 from mbirjax import TomographyModel, ParameterHandler
+import numpy as np # REMOVE THIS IF STILL HERE
+
+def generate_kernel(length):
+    # Ensure length is odd
+    if length % 2 == 0:
+        length += 1
+    
+    # Define the range based on the length
+    n = np.arange(-(length // 2), (length // 2) + 1)
+    
+    # Compute the kernel
+    kernel = (1/2) * np.sinc(n) - (1/4) * np.sinc(n / 2) ** 2
+    # kernel /= np.sum(kernel)  # Normalize the kernel
+    
+    return kernel
 
 
 class ParallelBeamModel(TomographyModel):
@@ -300,3 +315,17 @@ class ParallelBeamModel(TomographyModel):
         y = sine * x_tilde + cosine * y_tilde
 
         return x
+    
+    def fbp_recon(self, sinogram):
+        kernel = generate_kernel(2 * sinogram.shape[2] - 1) 
+
+        # Define convolution across a single row
+        convolve_row = lambda row: jnp.convolve(row, kernel, mode='valid')
+
+        # Apply convolution to all rows in all views using vmap
+        filtered_sinogram = jax.vmap(lambda view: jax.vmap(convolve_row)(view))(sinogram)
+
+        recon = self.back_project(filtered_sinogram)
+
+        return recon
+    
