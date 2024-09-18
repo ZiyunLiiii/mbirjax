@@ -755,7 +755,7 @@ class ConeBeamModel(mbirjax.TomographyModel):
         ramp_filter = (1 / 2) * jnp.sinc(n) - (1 / 4) * (jnp.sinc(n / 2)) ** 2
         return ramp_filter
 
-    @jax.jit
+
     def _apply_ramp_filter_1d(self, projection_row, ramp_filter):
         """
         Apply the ramp filter in the time domain to a single row of the sinogram.
@@ -771,7 +771,7 @@ class ConeBeamModel(mbirjax.TomographyModel):
         filtered_row = jnp.convolve(projection_row, ramp_filter, mode='valid')
         return filtered_row
 
-    @jax.jit
+
     def _apply_fdk_filter(self, sinogram):
         """
         Apply the ramp filter with geometric weighting in the time domain to the sinogram.
@@ -808,7 +808,6 @@ class ConeBeamModel(mbirjax.TomographyModel):
 
         return filtered_sinogram
 
-    @jax.jit
     def fdk_recon(self, sinogram):
         """
         Perform FDK (i.e. filtered back projection for cone-beam CT) reconstruction.
@@ -819,6 +818,7 @@ class ConeBeamModel(mbirjax.TomographyModel):
         Returns:
             recon (jax array): Reconstructed image from FDK.
         """
+        # TODO: Solve the scaling issue of the FDK recon
         filtered_sinogram = self._apply_fdk_filter(sinogram)
         recon = self.back_project(filtered_sinogram)
 

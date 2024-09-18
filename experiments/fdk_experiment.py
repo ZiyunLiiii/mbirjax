@@ -21,7 +21,7 @@ geometry_type = "cone"
 
 # Set parameters for the problem size - you can vary these, but if you make num_det_rows 
 # very small relative to channels, then the generated phantom may not have an interior.
-num_views = 64
+num_views = 256
 num_det_rows = 40
 num_det_channels = 128
 
@@ -83,7 +83,7 @@ def scale_to_unit_range(array):
     max_val = np.max(array)
     return (array - min_val) / (max_val - min_val)
 
-# THIS NEEDS TO BE FIXED AND REMOVED. SCALING IN fpb_recond method is out of whack.
+# THIS NEEDS TO BE FIXED AND REMOVED.
 recon = scale_to_unit_range(recon)
 
 max_diff = np.amax(np.abs(phantom - recon))
