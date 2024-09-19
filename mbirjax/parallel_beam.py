@@ -3,21 +3,6 @@ import jax.numpy as jnp
 from functools import partial
 from collections import namedtuple
 from mbirjax import TomographyModel, ParameterHandler
-import numpy as np # REMOVE THIS IF STILL HERE
-
-def generate_kernel(length):
-    # Ensure length is odd
-    if length % 2 == 0:
-        length += 1
-    
-    # Define the range based on the length
-    n = np.arange(-(length // 2), (length // 2) + 1)
-    
-    # Compute the kernel
-    kernel = (1/2) * np.sinc(n) - (1/4) * np.sinc(n / 2) ** 2
-    # kernel /= np.sum(kernel)  # Normalize the kernel
-    
-    return kernel
 
 
 class ParallelBeamModel(TomographyModel):
@@ -316,16 +301,79 @@ class ParallelBeamModel(TomographyModel):
 
         return x
     
+    def _create_ramp_filter(self, num_channels):
+        """
+        Create the ramp filter in the time domain using sinc functions.
+
+        Args:
+            num_channels (int): Number of detector channels in the sinogram.
+
+        Returns:
+            ramp_filter (jax array): The computed ramp filter.
+        """
+        n = jnp.arange(-num_channels + 1, num_channels)  # Range for symmetric filter ...
+        # ... ex: num_channels = 3, -> n = [-2, -1, 0, 1, 2]
+        ramp_filter = (1 / 2) * jnp.sinc(n) - (1 / 4) * (jnp.sinc(n / 2)) ** 2
+
+        return ramp_filter
+    
     def fbp_recon(self, sinogram):
-        kernel = generate_kernel(2 * sinogram.shape[2] - 1) 
+        """
+        Perform filtered back-projection (FBP) reconstruction on the given sinogram.
 
-        # Define convolution across a single row
-        convolve_row = lambda row: jnp.convolve(row, kernel, mode='valid')
+        Args:
+            sinogram (jax array): The input sinogram with shape (num_views, num_rows, num_channels).
 
-        # Apply convolution to all rows in all views using vmap
-        filtered_sinogram = jax.vmap(lambda view: jax.vmap(convolve_row)(view))(sinogram)
+        Returns:
+            recon (jax array): The reconstructed volume after back-projection.
+        """        
+        # Generate the filter
+        num_views, num_rows, num_channels = sinogram.shape
+        ramp_filter = self._create_ramp_filter(num_channels) 
+
+        # Flatten the sinogram (from 3D to 2D)
+        sinogram_flattened = sinogram.reshape(-1, sinogram.shape[-1])  # Shape: (num_views * num_rows, num_channels)
+
+        # Define convolution func that will be applied to each channel
+        def convolve_row(channel):
+            return jnp.convolve(channel, ramp_filter, mode="valid")
+
+        # Apply convolution to all channels, iterating over (views x rows)
+        filtered_sinogram_flattened = jax.vmap(convolve_row)(sinogram_flattened)
+
+        # Reshape the filtered sinogram back to (views, rows, channels)
+        filtered_sinogram = filtered_sinogram_flattened.reshape(num_views, num_rows, -1)
+
+        recon = self.back_project(filtered_sinogram) 
+
+        return recon
+    
+    def fbp_recon_2(self, sinogram):
+        # Define the filter
+        def generate_ramp_fiter(num_channels):
+            n = jnp.arange(-num_channels + 1, num_channels)  # Range for symmetric filter ...
+            # ... ex: num_channels = 3, -> n = [-2, -1, 0, 1, 2]
+            ramp_filter = (1 / 2) * jnp.sinc(n) - (1 / 4) * (jnp.sinc(n / 2)) ** 2
+
+            return ramp_filter
+        
+        # Generate the filter
+        num_channels = sinogram.shape[2]
+        kernel = generate_ramp_fiter(num_channels) 
+
+        # Define convolution across a single channel
+        def convolve_channel(channel):
+            return jnp.convolve(channel, kernel, mode="valid")
+
+        # Define a function to apply convolution to each row (which consists of channels)
+        def apply_convolution_to_row(row):
+            return jax.vmap(convolve_channel)(row)
+
+        # Apply convolution to all views and rows in the sinogram using vmap
+        filtered_sinogram = jax.vmap(apply_convolution_to_row)(sinogram)
 
         recon = self.back_project(filtered_sinogram)
 
         return recon
+    
     
