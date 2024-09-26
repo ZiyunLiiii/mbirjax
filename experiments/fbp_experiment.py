@@ -13,7 +13,7 @@ import mbirjax
 # Set geometry parameters
 geometry_type = "parallel"  # FBP is necessarily parallel, but I still define it as a "parameter"
 num_views = 256
-num_det_rows = 40
+num_det_rows = 128
 num_det_channels = 128
 detector_cone_angle = 0
 start_angle = -(np.pi + detector_cone_angle) * (1/2)
@@ -34,7 +34,7 @@ sinogram = ct_model_for_generation.forward_project(phantom)
 
 # View sinogram
 title = "Original sinogram \nUse the sliders to change the view or adjust the intensity range."
-# mbirjax.slice_viewer(sinogram, slice_axis=0, title=title, slice_label="View")
+mbirjax.slice_viewer(sinogram, slice_axis=0, title=title, slice_label="View")
 
 # Initialize the model for reconstruction.
 ct_model_for_recon = mbirjax.ParallelBeamModel(sinogram_shape, angles)
@@ -60,7 +60,7 @@ ct_model_for_recon.print_params()
 print("Starting recon", end="\n\n")
 time0 = time.time()
 filter = "Ram-Lak" 
-recon = ct_model_for_recon.fbp_recon_vmap(sinogram, filter=filter)
+recon = ct_model_for_recon.fbp_recon_reshape_jit(sinogram, filter=filter)
 
 recon.block_until_ready()
 elapsed = time.time() - time0

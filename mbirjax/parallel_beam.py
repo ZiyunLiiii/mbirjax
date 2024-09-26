@@ -335,6 +335,39 @@ class ParallelBeamModel(TomographyModel):
 
         return recon
     
+    def fbp_recon_reshape_jit(self, sinogram, filter="Ram-Lak"):
+        """
+        Perform filtered back-projection (FBP) reconstruction on the given sinogram.
+        
+        Args:
+            sinogram (jax array): The input sinogram with shape (num_views, num_rows, num_channels).
+            filter (string, optional): Name of the filter to be used. Defaults to "Ram-Lak."
+        Returns:
+            recon (jax array): The reconstructed volume after back-projection.
+        """        
+        # Generate the filter
+        num_views, num_rows, num_channels = sinogram.shape
+        filter = generate_filter(num_channels, filter=filter) 
+        # JIT-compile the convolution and reshaping part
+        @jax.jit
+        def convolve_and_reshape(sinogram):
+            # Flatten the sinogram (from 3D to 2D)
+            sinogram_flattened = sinogram.reshape(-1, sinogram.shape[-1])  # Shape: (num_views * num_rows, num_channels)
+            # Define convolution for a single row (across its channels)
+            def convolve_row(row):
+                return jnp.convolve(row, filter, mode="valid")
+            # Apply convolution across the channels, iterating over (views x rows)
+            filtered_sinogram_flattened = jax.vmap(convolve_row)(sinogram_flattened)
+            # Reshape the filtered sinogram back to (views, rows, channels)
+            return filtered_sinogram_flattened.reshape(num_views, num_rows, -1)
+        # Perform JIT-compiled convolution and reshaping
+        filtered_sinogram = convolve_and_reshape(sinogram)
+        # Back-project the filtered sinogram (non-JIT part)
+        recon = self.back_project(filtered_sinogram) 
+        recon *= jnp.pi / num_views  # scaling term
+
+        return recon
+    
     def fbp_recon_vmap(self, sinogram, filter="Ram-Lak"):
         """
         Perform filtered back-projection (FBP) reconstruction on the given sinogram.
