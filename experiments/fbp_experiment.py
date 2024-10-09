@@ -1,66 +1,51 @@
 """
-**MBIRJAX: Filtered back projection FBP basic demo**
+**MBIRJAX: Filtered back projection (FBP) basic demo**
 
 This is a modified version of the demo_1_shepp_logan.py file that is more streamlined and uses filtered back projection insetad of the standard recon.
 
 """
-
 import numpy as np
 import time
 import jax.numpy as jnp
 import mbirjax
 
+
 # Set geometry parameters
-geometry_type = "parallel"  # FBP is necessarily parallel, but I still define it as a "parameter"
-num_views = 256
+num_views = 64
 num_det_rows = 128
 num_det_channels = 128
-detector_cone_angle = 0
-start_angle = -(np.pi + detector_cone_angle) * (1/2)
-end_angle = (np.pi + detector_cone_angle) * (1/2)
+start_angle = -(jnp.pi) * (1/2)
+end_angle = (jnp.pi) * (1/2)
+angles = jnp.linspace(start_angle, end_angle, num_views, endpoint=False)
 
 # Initialize sinogram
 sinogram_shape = (num_views, num_det_rows, num_det_channels)
-angles = jnp.linspace(start_angle, end_angle, num_views, endpoint=False)
-ct_model_for_generation = mbirjax.ParallelBeamModel(sinogram_shape, angles)
+parallel_model = mbirjax.ParallelBeamModel(sinogram_shape, angles)
 
 # Generate 3D Shepp Logan phantom
 print("Creating phantom", end="\n\n")
-phantom = ct_model_for_generation.gen_modified_3d_sl_phantom()
+phantom = parallel_model.gen_modified_3d_sl_phantom()
 
 # Generate sinogram from phantom
 print("Creating sinogram", end="\n\n")
-sinogram = ct_model_for_generation.forward_project(phantom)
+sinogram = parallel_model.forward_project(phantom)
 
 # View sinogram
 title = "Original sinogram \nUse the sliders to change the view or adjust the intensity range."
 mbirjax.slice_viewer(sinogram, slice_axis=0, title=title, slice_label="View")
 
-# Initialize the model for reconstruction.
-ct_model_for_recon = mbirjax.ParallelBeamModel(sinogram_shape, angles)
-
-# Generate weights array - for an initial reconstruction, use weights = None, then modify if needed.
-weights = None
-# weights = ct_model_for_recon.gen_weights(sinogram / sinogram.max(), weight_type='transmission_root')
-
-# Set reconstruction parameter values
-# Increase sharpness by 1 or 2 to get clearer edges, possibly with more high-frequency ...
-# ... artifacts. Decrease by 1 or 2 to get softer edges and smoother interiors.
-sharpness = 0.0
-ct_model_for_recon.set_params(sharpness=sharpness)
-
 # Print out model parameters
-ct_model_for_recon.print_params()
+# parallel_model.print_params()
 
 ################################################################################
 # Reconstruction starts here
 ################################################################################
 
-# Perform VCD reconstruction
+# Perform FBP reconstruction
 print("Starting recon", end="\n\n")
 time0 = time.time()
-filter = "Ram-Lak" 
-recon = ct_model_for_recon.fbp_recon_reshape_jit(sinogram, filter=filter)
+filter = "ramp" 
+recon = parallel_model.fbp_recon(sinogram, filter=filter)
 
 recon.block_until_ready()
 elapsed = time.time() - time0

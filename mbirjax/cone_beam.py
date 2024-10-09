@@ -4,6 +4,7 @@ from functools import partial
 from collections import namedtuple
 import warnings
 import mbirjax
+from mbirjax.tomography_utils import generate_filter  # see fdk_recon method
 
 
 class ConeBeamModel(mbirjax.TomographyModel):
@@ -740,38 +741,53 @@ class ConeBeamModel(mbirjax.TomographyModel):
         # Convert from xyz to coordinates on detector
         pixel_mag = 1 / (1 / gp.magnification - y / gp.source_detector_dist)
         return y, pixel_mag
+    
+    def fdk_recon(self, sinogram, filter="ramp"):
+        # TODO write docstring, mention this only coveres planar detector in doc string.
 
-    def _create_ramp_filter(self, num_channels):
-        """
-        Create the ramp filter in the time domain using sinc functions.
+        num_views, num_rows, num_channels = sinogram.shape
+        filter = generate_filter(num_channels, filter=filter)
+        source_detector_dist, source_iso_dist = self.get_params(['source_detector_dist', 'source_iso_dist'])
 
-        Args:
-            num_channels (int): Number of detector channels in the sinogram.
+        # Define the s and v coordinates (in pixel units)
+        s = (jnp.arange(num_channels) - (num_channels // 2))
+        v = (jnp.arange(num_rows - 1, -1, -1) - (num_rows // 2))  # Reversed to start from the top
 
-        Returns:
-            ramp_filter (jax array): The computed ramp filter.
-        """
-        n = jnp.arange(-num_channels + 1, num_channels)  # Range for symmetric filter ...
-        # ... ex: num_channels = 3, -> n = [-2, -1, 0, 1, 2]
-        ramp_filter = (1 / 2) * jnp.sinc(n) - (1 / 4) * (jnp.sinc(n / 2)) ** 2
+        # Create the meshgrid
+        v_grid, s_grid = jnp.meshgrid(v, s, indexing='ij')
 
-        return ramp_filter
+        # Combine the s and v grids into a single matrix of coordinate pairs
+        coordinates = jnp.stack((s_grid, v_grid), axis=-1)
 
-    def fdk_recon(self, sinogram):
-        """
-        Apply the ramp filter with geometric weighting in the time domain to the sinogram.
+        pre_weight = source_iso_dist / jnp.sqrt(source_iso_dist**2 + jnp.sum(coordinates**2, axis=-1))
 
-        Args:
-            sinogram (jax array): 3D sinogram data with shape (num_views, num_rows, num_channels).
+        # Apply the pre-weighting factor to the sinogram
+        weighted_sinogram = sinogram * pre_weight
 
-        Returns:
-            filtered_sinogram (jax array): Sinogram after applying ramp filter and geometric weighting.
-        """
+        # Define convolution for a single row (across its channels)
+        def convolve_row(row):
+            return jnp.convolve(row, filter, mode="valid")
+
+        # Apply above convolve func across each row of a view
+        def apply_convolution_to_view(view):
+            return jax.vmap(convolve_row)(view)
+
+        # Apply convolution across the channels of the weighted sinogram per each fixed view & row
+        filtered_sinogram = jax.vmap(apply_convolution_to_view)(weighted_sinogram)
+
+        recon = self.back_project(filtered_sinogram)
+        recon *= (jnp.pi / num_views) * (source_detector_dist / source_iso_dist)
+        # recon *= (1 / (2 * num_views * source_iso_dist ** 2))
+        recon *= 2 * jnp.pi / num_views
+
+        return recon
+
+    def fdk_recon_old(self, sinogram):
         num_views, num_rows, num_channels = sinogram.shape
         source_detector_dist, source_iso_dist = self.get_params(['source_detector_dist', 'source_iso_dist'])
 
         # Create the ramp filter in time domain (sinc functions)
-        ramp_filter = self._create_ramp_filter(num_channels)
+        ramp_filter = generate_filter(num_channels, filter="Ram-Lak")
 
         # Flatten the sinogram (from 3D to 2D)
         sinogram_flattened = sinogram.reshape(-1, sinogram.shape[-1])  # Shape: (num_views * num_rows, num_channels)
@@ -798,5 +814,6 @@ class ConeBeamModel(mbirjax.TomographyModel):
         # Apply the weighting to the filtered sinogram, back project
         filtered_sinogram *= weighting[None, :, :]
         recon = self.back_project(filtered_sinogram)
+        # recon *= jnp.pi / num_views  # scaling term
 
         return recon
