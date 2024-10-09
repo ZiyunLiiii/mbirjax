@@ -51,8 +51,8 @@ mbirjax.slice_viewer(sinogram, slice_axis=0, title=title, slice_label="View")
 # Perform FDK recon
 print("Starting recon")
 time0 = time.time()
-filter = "ramp" 
-recon = cone_model.fdk_recon(sinogram, filter=filter)
+filter_name = "ramp" 
+recon = cone_model.fdk_recon(sinogram, filter_name=filter_name)
 
 recon.block_until_ready()
 elapsed = time.time() - time0

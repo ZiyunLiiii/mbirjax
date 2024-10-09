@@ -44,8 +44,8 @@ mbirjax.slice_viewer(sinogram, slice_axis=0, title=title, slice_label="View")
 # Perform FBP reconstruction
 print("Starting recon", end="\n\n")
 time0 = time.time()
-filter = "ramp" 
-recon = parallel_model.fbp_recon(sinogram, filter=filter)
+filter_name = "ramp" 
+recon = parallel_model.fbp_recon(sinogram, filter_name=filter_name)
 
 recon.block_until_ready()
 elapsed = time.time() - time0

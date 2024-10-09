@@ -302,20 +302,20 @@ class ParallelBeamModel(TomographyModel):
 
         return x
    
-    def fbp_recon(self, sinogram, filter="ramp"):
+    def fbp_recon(self, sinogram, filter_name="ramp"):
         """
         Perform filtered back-projection (FBP) reconstruction on the given sinogram.
 
         Args:
             sinogram (jax array): The input sinogram with shape (num_views, num_rows, num_channels).
-            filter (string, optional): Name of the filter to be used. Defaults to "Ram-Lak."
+            filter_name (string, optional): Name of the filter to be used. Defaults to "Ram-Lak."
 
         Returns:
             recon (jax array): The reconstructed volume after back-projection.
         """      
         # Generate the filter
         num_views, _, num_channels = sinogram.shape
-        filter = generate_filter(num_channels, filter=filter) 
+        filter = generate_filter(num_channels, filter_name=filter_name) 
 
         # Define convolution for a single row (across its channels)
         def convolve_row(row):

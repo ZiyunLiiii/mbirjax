@@ -742,11 +742,11 @@ class ConeBeamModel(mbirjax.TomographyModel):
         pixel_mag = 1 / (1 / gp.magnification - y / gp.source_detector_dist)
         return y, pixel_mag
     
-    def fdk_recon(self, sinogram, filter="ramp"):
+    def fdk_recon(self, sinogram, filter_name="ramp"):
         # TODO write docstring, mention this only coveres planar detector in doc string.
 
         num_views, num_rows, num_channels = sinogram.shape
-        filter = generate_filter(num_channels, filter=filter)
+        filter = generate_filter(num_channels, filter_name=filter_name)
         source_detector_dist, source_iso_dist = self.get_params(['source_detector_dist', 'source_iso_dist'])
 
         # Define the s and v coordinates (in pixel units)
